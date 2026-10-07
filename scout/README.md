@@ -2,23 +2,52 @@
 
 Browser-first personal sourcing agent for Nigeria.
 
-## Current MVP
-- Natural-language product request
-- Photo upload entry point
-- Five supplier options
-- Landed-price estimate in NGN
-- Supplier/QC/shipping trust UI
-- WebGPU capability detection with graceful fallback
-- Responsive mobile-first interface
+## Live sourcing layer
 
-## Architecture direction
-DOM/CSS handles the product experience. WebGPU is used only where browser GPU acceleration is useful, with feature detection and fallback. Supplier integrations, FX, freight, customs, payments and order tracking should live behind a backend/API rather than in the browser.
+Scout now has a server-side supplier adapter architecture.
 
-The product cards in this first commit are demonstration records, not live supplier inventory. Do not present them as live quotes.
+### Connected
+- Made-in-China public product search: live search adapter.
+- Supplier results are ranked by the selected Top / Cheap / Cheaper / Cheapest mode.
 
-## Run
+### Planned
+- 1688 adapter: intentionally disabled until approved/API access is configured.
+- Alibaba adapter: intentionally disabled until approved/API access is configured.
+
+Scout must never label demo records as live supplier data or pretend to have an API connection it does not have.
+
+## Run locally
+
+Terminal 1:
 ```bash
-cd scout
+cd ~/Afec/scout/api
 npm install
 npm run dev
 ```
+
+Terminal 2:
+```bash
+cd ~/Afec/scout
+npm install
+npm run dev -- --host 0.0.0.0
+```
+
+Open:
+`http://localhost:5173`
+
+The Vite development server proxies `/api` requests to `http://localhost:8787`.
+
+## Search API
+
+`POST /api/search`
+
+Example body:
+```json
+{"query":"leather sneakers","mode":"cheapest"}
+```
+
+The API returns live candidates from Made-in-China when its public search is reachable.
+
+## Important
+
+Live marketplace listings can change, and supplier price/freight/customs are not final until confirmed. Scout should verify supplier details and landed costs before taking payment.
