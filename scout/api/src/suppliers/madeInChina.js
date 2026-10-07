@@ -16,16 +16,16 @@ const STOP = new Set([
 
 function clean(value = "") {
   return String(value)
-    .replace(/\\s+/g, " ")
-    .replace(/\\s+([,.;])/g, "$1")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;])/g, "$1")
     .trim();
 }
 
 function tokens(value) {
   return clean(value)
     .toLowerCase()
-    .replace(/type[\\s-]?c/g, "typec")
-    .replace(/usb[\\s-]?c/g, "usbc")
+    .replace(/type[\s-]?c/g, "typec")
+    .replace(/usb[\s-]?c/g, "usbc")
     .replace(/[^a-z0-9]+/g, " ")
     .split(" ")
     .filter(t => t.length > 1 && !STOP.has(t));
@@ -49,7 +49,7 @@ function moneyRange(value) {
 
   const text = String(value).replace(/,/g, "");
   const match = text.match(
-    /(?:US\\$|USD\\$|\\$)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:-\\s*(?:US\\$|USD\\$|\\$)?\\s*(\\d+(?:\\.\\d+)?))?/i
+    /(?:US\$|USD\$|\$)\s*(\d+(?:\.\d+)?)\s*(?:-\s*(?:US\$|USD\$|\$)?\s*(\d+(?:\.\d+)?))?/i
   );
 
   if (!match) return { min: null, max: null };
@@ -96,10 +96,10 @@ function productLink(href) {
     const path = u.pathname.toLowerCase();
 
     return (
-      /\\/product\\//i.test(path) ||
+      /\/product\//i.test(path) ||
       /product-detail/i.test(path) ||
-      /\\/price\\/prodetail_/i.test(path) ||
-      /\\/prodetail_/i.test(path)
+      /\/price\/prodetail_/i.test(path) ||
+      /\/prodetail_/i.test(path)
     );
   } catch {
     return false;
@@ -114,7 +114,7 @@ function supplierLink(href) {
     if (!u.hostname.endsWith(".en.made-in-china.com")) return false;
 
     const path = u.pathname.toLowerCase();
-    return !/\\/product\\//i.test(path) && !/product-detail/i.test(path);
+    return !/\/product\//i.test(path) && !/product-detail/i.test(path);
   } catch {
     return false;
   }
@@ -132,8 +132,8 @@ function findCard(el) {
     if (
       text.length >= 40 &&
       text.length <= 5000 &&
-      /(?:US\\$|USD|\\$)\\s*\\d/i.test(text) &&
-      /(?:MOQ|Pieces?\\s*\\(MOQ\\)|pieces?\\s*\\(MOQ\\))/i.test(text)
+      /(?:US\$|USD|\$)\s*\d/i.test(text) &&
+      /(?:MOQ|Pieces?\s*\(MOQ\)|pieces?\s*\(MOQ\))/i.test(text)
     ) {
       return node;
     }
@@ -179,12 +179,12 @@ function parseCandidate(el, query, index) {
   const price = moneyRange(text);
 
   const moqMatch =
-    text.match(/([\\d,]+)\\s*(?:Pieces?|Sets?|Units?|Pairs?|Cartons?|Boxes?|Rolls?|Meters?|Kilograms?)\\s*\\(MOQ\\)/i) ||
-    text.match(/Minimum Order Quantity\\s*[:：]?\\s*([\\d,]+)/i);
+    text.match(/([\d,]+)\s*(?:Pieces?|Sets?|Units?|Pairs?|Cartons?|Boxes?|Rolls?|Meters?|Kilograms?)\s*\(MOQ\)/i) ||
+    text.match(/Minimum Order Quantity\s*[:：]?\s*([\d,]+)/i);
 
   const ratingMatch =
-    text.match(/(\\d(?:\\.\\d)?)\\s*(?:\\/|out of)\\s*5(?:\\.0)?/i) ||
-    text.match(/(?:Rating)\\s*[:：]?\\s*(\\d(?:\\.\\d)?)/i);
+    text.match(/(\d(?:\.\d)?)\s*(?:\/|out of)\s*5(?:\.0)?/i) ||
+    text.match(/(?:Rating)\s*[:：]?\s*(\d(?:\.\d)?)/i);
 
   const { supplier, supplierUrl } = findSupplier(card);
 
@@ -262,18 +262,18 @@ async function enrichSupplier(candidate) {
 
   const price = moneyRange(text);
   const moqMatch =
-    text.match(/Minimum Order Quantity\\s*[:：]?\\s*([\\d,]+)/i) ||
-    text.match(/MOQ\\s*[:：]?\\s*([\\d,]+)/i) ||
-    text.match(/([\\d,]+)\\s*(?:Pieces?|Sets?|Units?)\\s*\\(MOQ\\)/i);
+    text.match(/Minimum Order Quantity\s*[:：]?\s*([\d,]+)/i) ||
+    text.match(/MOQ\s*[:：]?\s*([\d,]+)/i) ||
+    text.match(/([\d,]+)\s*(?:Pieces?|Sets?|Units?)\s*\(MOQ\)/i);
 
   const ratingMatch =
-    text.match(/(?:Rating\\s*)?[:：]?\\s*(\\d(?:\\.\\d)?)\\s*(?:\\/|out of)\\s*5(?:\\.0)?/i) ||
-    text.match(/Rating\\s*[:：]?\\s*(\\d(?:\\.\\d)?)/i);
+    text.match(/(?:Rating\s*)?[:：]?\s*(\d(?:\.\d)?)\s*(?:\/|out of)\s*5(?:\.0)?/i) ||
+    text.match(/Rating\s*[:：]?\s*(\d(?:\.\d)?)/i);
 
   return {
     ...candidate,
     name: ogTitle
-      ? clean(ogTitle).replace(/\\s*[-|]\\s*Made-in-China.*$/i, "")
+      ? clean(ogTitle).replace(/\s*[-|]\s*Made-in-China.*$/i, "")
       : candidate.name,
     url: canonical ? new URL(canonical, BASE).href : candidate.url,
     supplier,
@@ -300,8 +300,8 @@ function slugify(query) {
   return query
     .trim()
     .toLowerCase()
-    .replace(/type[\\s-]?c/g, "type-c")
-    .replace(/usb[\\s-]?c/g, "usb-c")
+    .replace(/type[\s-]?c/g, "type-c")
+    .replace(/usb[\s-]?c/g, "usb-c")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
