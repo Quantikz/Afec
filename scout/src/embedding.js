@@ -1,4 +1,4 @@
-import { pipeline, matmul } from "@huggingface/transformers";
+import { pipeline } from "@huggingface/transformers";
 
 const MODEL = "onnx-community/embeddinggemma-2-ONNX";
 let extractorPromise = null;
@@ -9,8 +9,7 @@ export async function loadEmbedder(onProgress) {
       device: "webgpu",
       dtype: "q4",
       progress_callback: onProgress
-    }).catch(async (error) => {
-      
+    }).catch(async () => {
       extractorPromise = pipeline("feature-extraction", MODEL, {
         device: "wasm",
         dtype: "q4",
@@ -24,31 +23,52 @@ export async function loadEmbedder(onProgress) {
 
 export async function embedText(text, onProgress) {
   const extractor = await loadEmbedder(onProgress);
-  const prefix = "task: search result | query: ";
-  const output = await extractor(prefix + text, {
+  const output = await extractor("task: search result | query: " + text, {
     pooling: "mean",
     normalize: true
   });
   return output.tolist()[0];
 }
 
+function dot(a, b) {
+  let total = 0;
+  const length = Math.min(a.length, b.length);
+  for (let i = 0; i < length; i++) total += a[i] * b[i];
+  return total;
+}
+
 export async function rankByEmbedding(query, products, onProgress) {
   if (!products.length) return [];
+
   const extractor = await loadEmbedder(onProgress);
-  const queryVector = await extractor("task: search result | query: " + query, {
-    pooling: "mean",
-    normalize: true
-  });
-  const documents = products.map((p) =>
-    "title: none | text: " + (p.name || "") + " |
-    [p.supplier, p.description, p.category].filter(Boolean).join(" ")
+
+  const queryOutput = await extractor(
+    "task: search result | query: " + query,
+    { pooling: "mean", normalize: true }
   );
-  const documentVectors = await extractor(documents, {
+
+  const queryVector = queryOutput.tolist()[0];
+
+  const documents = products.map((p) =>
+    "title: " + (p.name || "") +
+    " | supplier: " + (p.supplier || "") +
+    " | description: " + (p.description || "") +
+    " | category: " + (p.category || "")
+  );
+
+  const documentOutput = await extractor(documents, {
     pooling: "mean",
     normalize: true
   });
-  const scores = matmul(queryVector, documentVectors.transpose()).tolist()[0];
+
+  const documentVectors = documentOutput.tolist();
+
   return products
-    .map((product, index) => ({ ...product, embeddingScore: Number(scores[index].toFixed(4)) }))
+    .map((product, index) => ({
+      ...product,
+      embeddingScore: Number(
+        dot(queryVector, documentVectors[index]).toFixed(4)
+      )
+    }))
     .sort((a, b) => b.embeddingScore - a.embeddingScore);
 }
