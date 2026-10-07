@@ -1,28 +1,31 @@
 import * as cheerio from "cheerio";
 
 const BASE = "https://www.made-in-china.com";
-const SEARCH_ROOT = "/products-search/hot-china-products/";
+
 const HEADERS = {
-  "user-agent": "Mozilla/5.0 (compatible; ScoutSourcingBot/1.0)",
-  "accept": "text/html,application/xhtml+xml"
+  "user-agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36",
+  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "accept-language": "en-US,en;q=0.9"
 };
 
 const STOP = new Set([
-  "get","me","the","a","an","for","with","and","or","of","to","in","on","from","please","find","want"
+  "get","me","the","a","an","for","with","and","or","of","to","in","on","from",
+  "please","find","want","show","search","looking","need","buy","cheap","cheapest",
+  "top","best","some","item","items","product","products"
 ]);
 
 function clean(value = "") {
   return String(value)
-    .replace(/\s+/g, " ")
-    .replace(/\s+([,.;])/g, "$1")
+    .replace(/\\s+/g, " ")
+    .replace(/\\s+([,.;])/g, "$1")
     .trim();
 }
 
 function tokens(value) {
   return clean(value)
     .toLowerCase()
-    .replace(/type[\s-]?c/g, "typec")
-    .replace(/usb[\s-]?c/g, "usbc")
+    .replace(/type[\\s-]?c/g, "typec")
+    .replace(/usb[\\s-]?c/g, "usbc")
     .replace(/[^a-z0-9]+/g, " ")
     .split(" ")
     .filter(t => t.length > 1 && !STOP.has(t));
@@ -37,15 +40,17 @@ function relevance(query, title) {
   for (const token of wanted) {
     if (hay.some(x => x === token || x.includes(token) || token.includes(x))) hits++;
   }
+
   return hits / wanted.length;
 }
 
 function moneyRange(value) {
   if (!value) return { min: null, max: null };
 
-  const match = String(value)
-    .replace(/,/g, "")
-    .match(/(?:US\$|USD\$|\$)\s*(\d+(?:\.\d+)?)\s*(?:-\s*(?:US\$|USD\$|\$)?\s*(\d+(?:\.\d+)?))?/i);
+  const text = String(value).replace(/,/g, "");
+  const match = text.match(
+    /(?:US\\$|USD\\$|\\$)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:-\\s*(?:US\\$|USD\\$|\\$)?\\s*(\\d+(?:\\.\\d+)?))?/i
+  );
 
   if (!match) return { min: null, max: null };
 
@@ -56,18 +61,29 @@ function moneyRange(value) {
 }
 
 function firstImage(box) {
-  const imgs = box.find("img").toArray();
-
-  for (const node of imgs) {
+  for (const node of box.find("img").toArray()) {
     const img = cheerio.load(node)("img");
-    const src = img.attr("data-src") || img.attr("data-original") || img.attr("src");
+    const src =
+      img.attr("data-src") ||
+      img.attr("data-original") ||
+      img.attr("data-lazy-src") ||
+      img.attr("src");
 
     if (src && !/logo|icon|avatar|loading|placeholder/i.test(src)) {
-      return new URL(src, BASE).href;
+      try {
+        return new URL(src, BASE).href;
+      } catch {}
     }
   }
 
   return null;
+}
+
+function isMicHost(hostname) {
+  return (
+    hostname === "made-in-china.com" ||
+    hostname.endsWith(".made-in-china.com")
+  );
 }
 
 function productLink(href) {
@@ -75,9 +91,16 @@ function productLink(href) {
 
   try {
     const u = new URL(href, BASE);
-    if (!u.hostname.endsWith(".made-in-china.com")) return false;
+    if (!isMicHost(u.hostname)) return false;
 
-    return /\/product\//i.test(u.pathname) || /product-detail/i.test(u.pathname);
+    const path = u.pathname.toLowerCase();
+
+    return (
+      /\\/product\\//i.test(path) ||
+      /product-detail/i.test(path) ||
+      /\\/price\\/prodetail_/i.test(path) ||
+      /\\/prodetail_/i.test(path)
+    );
   } catch {
     return false;
   }
@@ -88,11 +111,10 @@ function supplierLink(href) {
 
   try {
     const u = new URL(href, BASE);
-    return (
-      u.hostname.endsWith(".en.made-in-china.com") &&
-      !/\/product\//i.test(u.pathname) &&
-      !/product-detail/i.test(u.pathname)
-    );
+    if (!u.hostname.endsWith(".en.made-in-china.com")) return false;
+
+    const path = u.pathname.toLowerCase();
+    return !/\\/product\\//i.test(path) && !/product-detail/i.test(path);
   } catch {
     return false;
   }
@@ -101,10 +123,18 @@ function supplierLink(href) {
 function findCard(el) {
   let node = el;
 
-  for (let i = 0; i < 7 && node.length; i++, node = node.parent()) {
+  // Current Made-in-China pages nest the product title inside several
+  // wrappers. Look farther than the old 7-level limit and select the
+  // smallest ancestor that contains listing metadata.
+  for (let i = 0; i < 16 && node.length; i++, node = node.parent()) {
     const text = clean(node.text());
 
-    if (text.length > 40 && /US\$|USD|\$/.test(text) && /MOQ/i.test(text)) {
+    if (
+      text.length >= 40 &&
+      text.length <= 5000 &&
+      /(?:US\\$|USD|\\$)\\s*\\d/i.test(text) &&
+      /(?:MOQ|Pieces?\\s*\\(MOQ\\)|pieces?\\s*\\(MOQ\\))/i.test(text)
+    ) {
       return node;
     }
   }
@@ -112,36 +142,60 @@ function findCard(el) {
   return el.parent();
 }
 
-function parseCandidate(el, query, index) {
-  const href = el.attr("href");
-  const url = new URL(href, BASE).href;
-  const title = clean(el.attr("title") || el.text());
-  const card = findCard(el);
-  const text = clean(card.text());
-  const price = moneyRange(text);
+function findSupplier(card) {
+  const links = card
+    .find("a[href]")
+    .toArray()
+    .map(n => cheerio.load(n)("a"));
 
-  const moqMatch = text.match(
-    /([\d,]+)\s*(?:Pieces?|Sets?|Units?|Pairs?|Cartons?|Boxes?|Rolls?|Meters?|Kilograms?)\s*\(MOQ\)/i
+  const supplierEl = links.find(
+    a => supplierLink(a.attr("href")) && clean(a.text()).length > 2
   );
 
-  const ratingMatch = text.match(/(\d(?:\.\d)?)\s*\/\s*5(?:\.0)?/i);
+  return supplierEl
+    ? {
+        supplier: clean(supplierEl.text()),
+        supplierUrl: new URL(supplierEl.attr("href"), BASE).href
+      }
+    : { supplier: null, supplierUrl: null };
+}
 
-  const supplierEl = card
-    .find("a")
-    .toArray()
-    .map(n => cheerio.load(n)("a"))
-    .find(a => supplierLink(a.attr("href")) && clean(a.text()).length > 2);
+function parseCandidate(el, query, index) {
+  const href = el.attr("href");
+  if (!href || !productLink(href)) return null;
 
-  const supplier = supplierEl ? clean(supplierEl.text()) : null;
-  const supplierUrl = supplierEl
-    ? new URL(supplierEl.attr("href"), BASE).href
-    : null;
+  const url = new URL(href, BASE).href;
+  const card = findCard(el);
+  const text = clean(card.text());
 
-  const verified = /\bCertified\b|Audited|Diamond Member|verified business|verified supplier/i.test(text);
-  const score = relevance(query, title + " " + text);
+  const title = clean(
+    el.attr("title") ||
+    el.attr("aria-label") ||
+    el.text()
+  );
 
-  if (score < 0.5) return null;
-  if (title.length < 8 || title.length > 300) return null;
+  if (title.length < 8 || title.length > 500) return null;
+
+  const price = moneyRange(text);
+
+  const moqMatch =
+    text.match(/([\\d,]+)\\s*(?:Pieces?|Sets?|Units?|Pairs?|Cartons?|Boxes?|Rolls?|Meters?|Kilograms?)\\s*\\(MOQ\\)/i) ||
+    text.match(/Minimum Order Quantity\\s*[:：]?\\s*([\\d,]+)/i);
+
+  const ratingMatch =
+    text.match(/(\\d(?:\\.\\d)?)\\s*(?:\\/|out of)\\s*5(?:\\.0)?/i) ||
+    text.match(/(?:Rating)\\s*[:：]?\\s*(\\d(?:\\.\\d)?)/i);
+
+  const { supplier, supplierUrl } = findSupplier(card);
+
+  const verified = /Audited Supplier|Audited|Diamond Member|verified business|verified supplier/i.test(text);
+  const audited = /Audited Supplier|audited by|audited factory/i.test(text);
+
+  const score = relevance(query, title);
+
+  // A one-token query such as "cap" should accept a title containing that
+  // token. Multi-token searches still require a strong title match.
+  if (score < (tokens(query).length <= 1 ? 0.5 : 0.45)) return null;
 
   return {
     id: "mic-" + index,
@@ -152,7 +206,7 @@ function parseCandidate(el, query, index) {
     supplierUrl,
     rating: ratingMatch ? Number(ratingMatch[1]) : null,
     verified,
-    audited: /Audited/i.test(text),
+    audited,
     supplierScore: null,
     price: price.min,
     priceMax: price.max,
@@ -167,11 +221,12 @@ function parseCandidate(el, query, index) {
 
 async function fetchText(url) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), 10000);
 
   try {
     const response = await fetch(url, {
       headers: HEADERS,
+      redirect: "follow",
       signal: controller.signal
     });
 
@@ -190,11 +245,12 @@ async function enrichSupplier(candidate) {
 
   const $ = cheerio.load(html);
   const text = clean($.root().text());
+
   const ogImage = $('meta[property="og:image"]').attr("content");
   const ogTitle = $('meta[property="og:title"]').attr("content");
   const canonical = $('link[rel="canonical"]').attr("href");
 
-  const supplierEl = $("a")
+  const supplierEl = $("a[href]")
     .toArray()
     .map(n => cheerio.load(n)("a"))
     .find(a => supplierLink(a.attr("href")) && clean(a.text()).length > 2);
@@ -206,15 +262,18 @@ async function enrichSupplier(candidate) {
 
   const price = moneyRange(text);
   const moqMatch =
-    text.match(/Minimum Order Quantity\s*([\d,]+)/i) ||
-    text.match(/([\d,]+)\s*(?:Pieces?|Sets?|Units?)\s*\(MOQ\)/i);
+    text.match(/Minimum Order Quantity\\s*[:：]?\\s*([\\d,]+)/i) ||
+    text.match(/MOQ\\s*[:：]?\\s*([\\d,]+)/i) ||
+    text.match(/([\\d,]+)\\s*(?:Pieces?|Sets?|Units?)\\s*\\(MOQ\\)/i);
 
-  const ratingMatch = text.match(/(\d(?:\.\d)?)\s*\/\s*5(?:\.0)?/i);
+  const ratingMatch =
+    text.match(/(?:Rating\\s*)?[:：]?\\s*(\\d(?:\\.\\d)?)\\s*(?:\\/|out of)\\s*5(?:\\.0)?/i) ||
+    text.match(/Rating\\s*[:：]?\\s*(\\d(?:\\.\\d)?)/i);
 
   return {
     ...candidate,
     name: ogTitle
-      ? clean(ogTitle).replace(/\s*[-|]\s*Made-in-China.*$/i, "")
+      ? clean(ogTitle).replace(/\\s*[-|]\\s*Made-in-China.*$/i, "")
       : candidate.name,
     url: canonical ? new URL(canonical, BASE).href : candidate.url,
     supplier,
@@ -222,10 +281,10 @@ async function enrichSupplier(candidate) {
     rating: candidate.rating ?? (ratingMatch ? Number(ratingMatch[1]) : null),
     verified:
       candidate.verified ||
-      /verified business|verified supplier|Diamond Member|audited by|audited factory/i.test(text),
+      /verified business|verified supplier|Diamond Member|audited by|Audited Supplier/i.test(text),
     audited:
       candidate.audited ||
-      /audited by|audited factory/i.test(text),
+      /audited by|audited factory|Audited Supplier/i.test(text),
     price: candidate.price ?? price.min,
     priceMax: candidate.priceMax ?? price.max,
     moq:
@@ -237,68 +296,113 @@ async function enrichSupplier(candidate) {
   };
 }
 
-async function fetchSearch(query) {
-  const slug = query
+function slugify(query) {
+  return query
     .trim()
-    .replace(/[^a-z0-9]+/gi, "_")
-    .replace(/^_|_$/g, "");
-
-  const primary = BASE + SEARCH_ROOT + encodeURIComponent(slug) + ".html";
-
-  let response = await fetch(primary, { headers: HEADERS });
-
-  if (response.ok) {
-    return { url: primary, html: await response.text() };
-  }
-
-  const fallback =
-    BASE +
-    "/products-search/hot-china-products/Search.html?word=" +
-    encodeURIComponent(query);
-
-  response = await fetch(fallback, { headers: HEADERS });
-
-  if (!response.ok) {
-    throw new Error("Made-in-China returned HTTP " + response.status);
-  }
-
-  return { url: fallback, html: await response.text() };
+    .toLowerCase()
+    .replace(/type[\\s-]?c/g, "type-c")
+    .replace(/usb[\\s-]?c/g, "usb-c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-export async function searchMadeInChina(query, { limit = 20 } = {}) {
-  const { html } = await fetchSearch(query);
+async function fetchSearch(query) {
+  const slug = slugify(query);
+
+  // The /price/*-price.html pages expose stable product cards with direct
+  // supplier product URLs and are currently the most parser-friendly MIC
+  // search surface.
+  const urls = [
+    BASE + "/price/" + encodeURIComponent(slug) + "-price.html",
+    BASE + "/products-search/hot-china-products/" +
+      encodeURIComponent(slug.replace(/-/g, "_")) + ".html",
+    BASE +
+      "/products-search/hot-china-products/Search.html?word=" +
+      encodeURIComponent(query)
+  ];
+
+  const failures = [];
+
+  for (const url of urls) {
+    const html = await fetchText(url);
+    if (html && html.length > 5000) {
+      return { url, html };
+    }
+    failures.push(url);
+  }
+
+  throw new Error(
+    "Made-in-China search pages could not be fetched: " + failures.join(", ")
+  );
+}
+
+function collectFromHtml(html, query, limit) {
   const $ = cheerio.load(html);
   const seen = new Set();
   const candidates = [];
 
+  // Direct product links are the most reliable signal. This works for both
+  // www.made-in-china.com and supplier subdomains such as
+  // supplier.en.made-in-china.com.
   $("a[href]").each((_, node) => {
-    if (candidates.length >= Math.max(limit * 3, 15)) return;
+    if (candidates.length >= Math.max(limit * 4, 40)) return;
 
     const el = $(node);
     if (!productLink(el.attr("href"))) return;
 
     const candidate = parseCandidate(el, query, candidates.length);
-
     if (!candidate || seen.has(candidate.url)) return;
 
     seen.add(candidate.url);
     candidates.push(candidate);
   });
 
+  return candidates;
+}
+
+export async function searchMadeInChina(query, { limit = 20 } = {}) {
+  const { url: searchUrl, html } = await fetchSearch(query);
+
+  let candidates = collectFromHtml(html, query, limit);
+
+  // If the first surface changes markup, try the other public MIC surfaces
+  // before giving up rather than silently returning zero results.
+  if (!candidates.length) {
+    const slug = slugify(query);
+    const fallbackUrls = [
+      BASE + "/products-search/hot-china-products/" +
+        encodeURIComponent(slug.replace(/-/g, "_")) + ".html",
+      BASE + "/price/" + encodeURIComponent(slug) + "-price.html",
+      BASE +
+        "/products-search/hot-china-products/Search.html?word=" +
+        encodeURIComponent(query)
+    ];
+
+    for (const url of fallbackUrls) {
+      if (url === searchUrl) continue;
+
+      const fallbackHtml = await fetchText(url);
+      if (!fallbackHtml) continue;
+
+      candidates = collectFromHtml(fallbackHtml, query, limit);
+      if (candidates.length) break;
+    }
+  }
+
   if (!candidates.length) {
     throw new Error(
-      "No confidently matched Made-in-China product listings were found."
+      "Made-in-China returned a page, but no product-card links could be parsed for: " +
+      query
     );
   }
 
   const enriched = [];
-
   for (const candidate of candidates.slice(0, Math.min(candidates.length, 12))) {
     enriched.push(await enrichSupplier(candidate));
   }
 
   return enriched
-    .filter(p => p.relevance >= 0.5)
+    .filter(p => p.relevance >= 0.45)
     .sort(
       (a, b) =>
         b.relevance - a.relevance ||
