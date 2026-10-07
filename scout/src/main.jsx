@@ -2,6 +2,7 @@ import React,{useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import {Search,Camera,Link2,SlidersHorizontal,ChevronRight,Check,ShieldCheck,Truck,PackageCheck,Sparkles,X,Star} from "lucide-react";
 import "./styles.css";
+import {rankByEmbedding} from "./embedding.js";
 
 const API="/api";
 
@@ -51,6 +52,7 @@ function App(){
  const [live,setLive]=useState(false);
  const [hasLiveResults,setHasLiveResults]=useState(false);
  const [apiConnected,setApiConnected]=useState(false);
+ const [embeddingStatus,setEmbeddingStatus]=useState("idle");
  const fileRef=useRef();
  React.useEffect(()=>setWebgpu("gpu"in navigator?"ready":"fallback"),[]);
  const doSearch=async()=>{
@@ -65,13 +67,22 @@ function App(){
    setApiConnected(true);
    setLive(isLive);
    setHasLiveResults(isLive&&liveResults.length>0);
-   setRemoteResults(liveResults);
-  }catch(e){setApiConnected(false);setLive(false);setHasLiveResults(false);setRemoteResults([]);setError(e.message+" — start the Scout API in Termux.");}
+   setEmbeddingStatus("loading");
+   try{
+    const ranked=await rankByEmbedding(query.trim(),liveResults);
+    setRemoteResults(ranked);
+    setEmbeddingStatus("ready");
+   }catch(embeddingError){
+    console.warn("Embedding matcher unavailable:",embeddingError);
+    setRemoteResults(liveResults);
+    setEmbeddingStatus("fallback");
+   }
+  }catch(e){setApiConnected(false);setLive(false);setHasLiveResults(false);setRemoteResults([]);setEmbeddingStatus("fallback");setError(e.message+" — start the Scout API in Termux.");}
   finally{setLoading(false);}
  };
  const results=(apiConnected?remoteResults:rankProducts(mode)).slice(0,5);
  return <main>
-  <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"}</div></header>
+  <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"} · {embeddingStatus==="ready"?"AI match ready":embeddingStatus==="loading"?"AI matching…":"AI matcher idle"}</div></header>
   <section className="hero">
    <div className="eyebrow"><Sparkles size={14}/> Personal sourcing agent for Nigeria</div>
    <h1>Find it.<br/><em>We get it.</em></h1>
@@ -90,7 +101,7 @@ function App(){
 
   {!searched?<section className="trust"><div><ShieldCheck/><strong>High-rated suppliers first</strong><span>Scout scores supplier reliability before ranking price.</span></div><div><Truck/><strong>Delivered pricing</strong><span>Compare the estimated total landed cost in Nigeria.</span></div><div><PackageCheck/><strong>QC before shipping</strong><span>Items are checked in China before international shipping.</span></div></section>:
   <section className="results">
-   <div className="resulthead"><div><span className="eyebrow">{hasLiveResults?"Live supplier results":apiConnected?"No matching live listings":"Scout results"}</span><h2>{loading?"Searching suppliers…":results.length+" options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · {hasLiveResults?"Made-in-China live data":"demo fallback"}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
+   <div className="resulthead"><div><span className="eyebrow">{hasLiveResults?"Live supplier results":apiConnected?"No matching live listings":"Scout results"}</span><h2>{loading?"Searching suppliers…":results.length+" options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · {hasLiveResults?"Made-in-China live data":"demo fallback"}{embeddingStatus==="ready"?" · EmbeddingGemma 2":""}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
    {error&&<div className="errorbox">{error}</div>}<div className="modes">{modes.map(m=><button key={m.id} className={mode===m.id?"mode active":"mode"} onClick={()=>{setMode(m.id);setSelected(null);if(searched)doSearch()}}><b>{m.label}</b><span>{m.desc}</span></button>)}</div>
    <div className="grid">{results.map((p,i)=><article className={"card "+(selected?.id===p.id?"chosen":"")} key={p.id} onClick={()=>setSelected(p)}>
     <div className="photo"><img src={p.image}/><span>{i===0?(mode==="cheapest"?"Lowest cost":"Scout pick"):(p.supplierScore>=94?"Highly rated":"Verified")}</span></div>
