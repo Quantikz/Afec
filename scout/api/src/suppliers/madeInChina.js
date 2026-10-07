@@ -85,7 +85,7 @@ function parseCandidate(el,query,index){
   const card=findCard(el);
   const text=clean(card.text());
   const price=moneyRange(text);
-  const moqMatch=text.match(/([\\d,]+)\\s*(?:Pieces?|Sets?|Units?|Pairs?|Cartons?|Boxes?|Rolls?|Meters?|Kilograms?|Kilograms?\\s*\\(MOQ\\))/i);
+  const moqMatch=text.match(/([\\d,]+)\\s*(?:Pieces?|Sets?|Units?|Pairs?|Cartons?|Boxes?|Rolls?|Meters?|Kilograms?)\\s*\\(MOQ\\)/i);
   const ratingMatch=text.match(/(\\d(?:\\.\\d)?)\\s*\\/\\s*5(?:\\.0)?/i);
   const supplierEl=card.find("a").toArray().map(n=>cheerio.load(n)("a")).find(a=>supplierLink(a.attr("href"))&&clean(a.text()).length>2);
   const supplier=supplierEl?clean(supplierEl.text()):null;
