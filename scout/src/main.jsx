@@ -90,9 +90,9 @@ function App(){
    const priceWeight=1-modeWeight;
    return (simB*100*modeWeight+qualityB*.15-costB/10000*priceWeight)-(simA*100*modeWeight+qualityA*.15-costA/10000*priceWeight);
   });
- const results=(apiConnected?liveRanked:rankProducts(mode)).slice(0,5);
+ const results=(apiConnected?liveRanked:[]).slice(0,5);
  return <main>
-  <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"} · {embeddingStatus==="ready"?"AI match ready":embeddingStatus==="loading"?"AI matching…":"AI matcher idle"}</div></header>
+  <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div></header>
   <section className="hero">
    <div className="eyebrow"><Sparkles size={14}/> Personal sourcing agent for Nigeria</div>
    <h1>Find it.<br/><em>We get it.</em></h1>
@@ -111,7 +111,7 @@ function App(){
 
   {!searched?<section className="trust"><div><ShieldCheck/><strong>High-rated suppliers first</strong><span>Scout scores supplier reliability before ranking price.</span></div><div><Truck/><strong>Delivered pricing</strong><span>Compare the estimated total landed cost in Nigeria.</span></div><div><PackageCheck/><strong>QC before shipping</strong><span>Items are checked in China before international shipping.</span></div></section>:
   <section className="results">
-   <div className="resulthead"><div><span className="eyebrow">{hasLiveResults?"Live supplier results":apiConnected?"No matching live listings":"Scout results"}</span><h2>{loading?"Searching suppliers…":results.length+" options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · {hasLiveResults?"Made-in-China live data":"demo fallback"}{embeddingStatus==="ready"?" · EmbeddingGemma 2":""}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
+   <div className="resulthead"><div><span className="eyebrow">SCOUT RESULTS</span><h2>{loading?"Finding options…":results.length?results.length+" options found":"No options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
    {error&&<div className="errorbox">{error}</div>}<div className="modes">{modes.map(m=><button key={m.id} className={mode===m.id?"mode active":"mode"} onClick={()=>{setMode(m.id);setSelected(null);if(searched)doSearch()}}><b>{m.label}</b><span>{m.desc}</span></button>)}</div>
    <div className="grid">{results.map((p,i)=><article className={"card "+(selected?.id===p.id?"chosen":"")} key={p.id} onClick={()=>setSelected(p)}>
     <div className="photo"><img src={p.image}/><span>{i===0?(mode==="cheapest"?"Lowest cost":"Scout pick"):(p.supplierScore>=94?"Highly rated":"Verified")}</span></div>
@@ -119,7 +119,7 @@ function App(){
    </article>)}</div>
   </section>}
 
-  {selected&&<aside className="estimate"><div><span className="eyebrow">Estimated delivered price</span><h2>{selected.landed!=null?`₦${selected.landed.toLocaleString()}`:"Price on request"}</h2><p>{selected.rating??"Unrated"}★ supplier · {selected.supplierScore}/100 supplier score · Source: {selected.source||"Scout"}.</p></div><div className="breakdown"><span>Supplier price <b>{selected.price!=null?`${selected.currency==="USD"?"$":"¥"}${selected.price}`:"Quote required"}</b></span><span>China + international freight <b>Included</b></span><span>Customs & handling <b>Included</b></span><span>Scout sourcing & service <b>Included</b></span></div><button className="continue">Continue with this option <ChevronRight size={17}/></button></aside>}
+  {selected&&<aside className="estimate"><div><span className="eyebrow">Estimated delivered price</span><h2>{selected.landed!=null?`₦${selected.landed.toLocaleString()}`:"Price on request"}</h2><p>{selected.rating??"Unrated"}★ supplier · {selected.supplierScore}/100 supplier score.</p></div><div className="breakdown"><span>Supplier price <b>{selected.price!=null?`${selected.currency==="USD"?"$":"¥"}${selected.price}`:"Quote required"}</b></span><span>China + international freight <b>Included</b></span><span>Customs & handling <b>Included</b></span><span>Scout sourcing & service <b>Included</b></span></div><button className="continue">Continue with this option <ChevronRight size={17}/></button></aside>}
   <footer>Scout is an AI-assisted sourcing service. Supplier availability, freight, customs and FX are confirmed before payment. Live supplier records are shown only when the Scout API is connected; otherwise the interface uses clearly labelled demo fallback data.</footer>
  </main>
 }
