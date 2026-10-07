@@ -80,7 +80,17 @@ function App(){
   }catch(e){setApiConnected(false);setLive(false);setHasLiveResults(false);setRemoteResults([]);setEmbeddingStatus("fallback");setError(e.message+" — start the Scout API in Termux.");}
   finally{setLoading(false);}
  };
- const results=(apiConnected?remoteResults:rankProducts(mode)).slice(0,5);
+ const liveRanked=remoteResults
+  .filter(p=>p.embeddingScore==null||p.embeddingScore>=0.25)
+  .sort((a,b)=>{
+   const simA=a.embeddingScore??0, simB=b.embeddingScore??0;
+   const costA=a.landed??a.price??Number.MAX_SAFE_INTEGER, costB=b.landed??b.price??Number.MAX_SAFE_INTEGER;
+   const qualityA=a.supplierScore??0, qualityB=b.supplierScore??0;
+   const modeWeight={top:.55,cheap:.45,cheaper:.30,cheapest:.15}[mode]??.45;
+   const priceWeight=1-modeWeight;
+   return (simB*100*modeWeight+qualityB*.15-costB/10000*priceWeight)-(simA*100*modeWeight+qualityA*.15-costA/10000*priceWeight);
+  });
+ const results=(apiConnected?liveRanked:rankProducts(mode)).slice(0,5);
  return <main>
   <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"} · {embeddingStatus==="ready"?"AI match ready":embeddingStatus==="loading"?"AI matching…":"AI matcher idle"}</div></header>
   <section className="hero">
@@ -105,7 +115,7 @@ function App(){
    {error&&<div className="errorbox">{error}</div>}<div className="modes">{modes.map(m=><button key={m.id} className={mode===m.id?"mode active":"mode"} onClick={()=>{setMode(m.id);setSelected(null);if(searched)doSearch()}}><b>{m.label}</b><span>{m.desc}</span></button>)}</div>
    <div className="grid">{results.map((p,i)=><article className={"card "+(selected?.id===p.id?"chosen":"")} key={p.id} onClick={()=>setSelected(p)}>
     <div className="photo"><img src={p.image}/><span>{i===0?(mode==="cheapest"?"Lowest cost":"Scout pick"):(p.supplierScore>=94?"Highly rated":"Verified")}</span></div>
-    <div className="cardbody"><h3>{p.name}</h3><small>{p.supplier}</small><div className="rating"><Star size={12} fill="currentColor"/> {p.rating??"—"} · {p.supplierScore}/100 supplier score</div>{(p.price!=null||p.priceMax!=null)&&<small className="meta">{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}${p.priceMax&&p.priceMax!==p.price?`–${p.priceMax}`:""}`:"Price on request"}{p.moq?` · MOQ ${p.moq}`:""}</small>}<div className="price"><span>{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}${p.priceMax&&p.priceMax!==p.price?`–${p.priceMax}`:""}`:"Price on request"}</span><b>{p.landed!=null?`≈ ₦${p.landed.toLocaleString()}`:"Quote needed"}</b></div><div className="selectline">{selected?.id===p.id?<><Check size={15}/> Selected</>:<>View landed price <ChevronRight size={14}/></>}</div></div>
+    <div className="cardbody"><h3>{p.name}</h3><small>{p.supplier}</small><div className="rating"><Star size={12} fill="currentColor"/> {p.rating??"—"} · {p.supplierScore??"—"}/100 supplier score{p.embeddingScore!=null&&<> · {Math.round(p.embeddingScore*100)}% match</>}</div>{(p.price!=null||p.priceMax!=null)&&<small className="meta">{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}${p.priceMax&&p.priceMax!==p.price?`–${p.priceMax}`:""}`:"Price on request"}{p.moq?` · MOQ ${p.moq}`:""}</small>}<div className="price"><span>{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}${p.priceMax&&p.priceMax!==p.price?`–${p.priceMax}`:""}`:"Price on request"}</span><b>{p.landed!=null?`≈ ₦${p.landed.toLocaleString()}`:"Quote needed"}</b></div><div className="selectline">{selected?.id===p.id?<><Check size={15}/> Selected</>:<>View landed price <ChevronRight size={14}/></>}</div></div>
    </article>)}</div>
   </section>}
 
