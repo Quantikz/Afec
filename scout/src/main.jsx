@@ -51,7 +51,18 @@ function App(){
  const [live,setLive]=useState(false);
  const fileRef=useRef();
  React.useEffect(()=>setWebgpu("gpu"in navigator?"ready":"fallback"),[]);
- const doSearch=async()=>{\n  if(!query.trim()&&!photo)return;\n  setSearched(true); setLoading(true); setError(""); setSelected(null);\n  try{\n   const res=await fetch(API+"/search",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({query:query.trim(),mode})});\n   const data=await res.json();\n   if(!res.ok)throw new Error(data.error||"Search failed");\n   setLive(data.sourceStatus?.madeInChina==="live");\n   setRemoteResults(data.results||[]);\n  }catch(e){setLive(false);setError(e.message+" — start the Scout API in Termux.");}\n  finally{setLoading(false);}\n };
+ const doSearch=async()=>{
+  if(!query.trim()&&!photo)return;
+  setSearched(true); setLoading(true); setError(""); setSelected(null);
+  try{
+   const res=await fetch(API+"/search",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({query:query.trim(),mode})});
+   const data=await res.json();
+   if(!res.ok)throw new Error(data.error||"Search failed");
+   setLive(data.sourceStatus?.madeInChina==="live");
+   setRemoteResults(data.results||[]);
+  }catch(e){setLive(false);setError(e.message+" — start the Scout API in Termux.");}
+  finally{setLoading(false);}
+ };
  const results=(remoteResults.length?remoteResults:rankProducts(mode)).slice(0,5);
  return <main>
   <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"}</div></header>
