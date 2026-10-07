@@ -10,7 +10,7 @@ export async function loadEmbedder(onProgress) {
       dtype: "q4",
       progress_callback: onProgress
     }).catch(async (error) => {
-      if (!("gpu" in navigator)) throw error;
+      
       extractorPromise = pipeline("feature-extraction", MODEL, {
         device: "wasm",
         dtype: "q4",
@@ -40,7 +40,7 @@ export async function rankByEmbedding(query, products, onProgress) {
     normalize: true
   });
   const documents = products.map((p) =>
-    "title: " + (p.name || "") + " | text: " +
+    "title: none | text: " + (p.name || "") + " |
     [p.supplier, p.description, p.category].filter(Boolean).join(" ")
   );
   const documentVectors = await extractor(documents, {
