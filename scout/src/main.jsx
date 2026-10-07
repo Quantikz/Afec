@@ -49,6 +49,7 @@ function App(){
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState("");
  const [live,setLive]=useState(false);
+ const [hasLiveResults,setHasLiveResults]=useState(false);
  const fileRef=useRef();
  React.useEffect(()=>setWebgpu("gpu"in navigator?"ready":"fallback"),[]);
  const doSearch=async()=>{
@@ -58,12 +59,15 @@ function App(){
    const res=await fetch(API+"/search",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({query:query.trim(),mode})});
    const data=await res.json();
    if(!res.ok)throw new Error(data.error||"Search failed");
-   setLive(data.sourceStatus?.madeInChina==="live");
-   setRemoteResults(data.results||[]);
-  }catch(e){setLive(false);setError(e.message+" — start the Scout API in Termux.");}
+   const liveResults=Array.isArray(data.results)?data.results:[];
+   const isLive=data.sourceStatus?.madeInChina==="live";
+   setLive(isLive);
+   setHasLiveResults(isLive&&liveResults.length>0);
+   setRemoteResults(liveResults);
+  }catch(e){setLive(false);setHasLiveResults(false);setRemoteResults([]);setError(e.message+" — start the Scout API in Termux.");}
   finally{setLoading(false);}
  };
- const results=(remoteResults.length?remoteResults:rankProducts(mode)).slice(0,5);
+ const results=(hasLiveResults?remoteResults:rankProducts(mode)).slice(0,5);
  return <main>
   <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"}</div></header>
   <section className="hero">
@@ -84,11 +88,11 @@ function App(){
 
   {!searched?<section className="trust"><div><ShieldCheck/><strong>High-rated suppliers first</strong><span>Scout scores supplier reliability before ranking price.</span></div><div><Truck/><strong>Delivered pricing</strong><span>Compare the estimated total landed cost in Nigeria.</span></div><div><PackageCheck/><strong>QC before shipping</strong><span>Items are checked in China before international shipping.</span></div></section>:
   <section className="results">
-   <div className="resulthead"><div><span className="eyebrow">{live?"Live supplier results":"Scout results"}</span><h2>{loading?"Searching suppliers…":results.length+" options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · {live?"Made-in-China live data":"demo fallback"}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
+   <div className="resulthead"><div><span className="eyebrow">{live?"Live supplier results":"Scout results"}</span><h2>{loading?"Searching suppliers…":results.length+" options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · {hasLiveResults?"Made-in-China live data":"demo fallback"}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
    {error&&<div className="errorbox">{error}</div>}<div className="modes">{modes.map(m=><button key={m.id} className={mode===m.id?"mode active":"mode"} onClick={()=>{setMode(m.id);setSelected(null);if(searched)doSearch()}}><b>{m.label}</b><span>{m.desc}</span></button>)}</div>
    <div className="grid">{results.map((p,i)=><article className={"card "+(selected?.id===p.id?"chosen":"")} key={p.id} onClick={()=>setSelected(p)}>
     <div className="photo"><img src={p.image}/><span>{i===0?(mode==="cheapest"?"Lowest cost":"Scout pick"):(p.supplierScore>=94?"Highly rated":"Verified")}</span></div>
-    <div className="cardbody"><h3>{p.name}</h3><small>{p.supplier}</small><div className="rating"><Star size={12} fill="currentColor"/> {p.rating??"—"} · {p.supplierScore}/100 supplier score</div><div className="price"><span>{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}`:"Price on request"}</span><b>{p.landed!=null?`≈ ₦${p.landed.toLocaleString()}`:"Quote needed"}</b></div><div className="selectline">{selected?.id===p.id?<><Check size={15}/> Selected</>:<>View landed price <ChevronRight size={14}/></>}</div></div>
+    <div className="cardbody"><h3>{p.name}</h3><small>{p.supplier}</small><div className="rating"><Star size={12} fill="currentColor"/> {p.rating??"—"} · {p.supplierScore}/100 supplier score</div>{(p.price!=null||p.priceMax!=null)&&<small className="meta">{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}${p.priceMax&&p.priceMax!==p.price?`–${p.priceMax}`:""}`:"Price on request"}{p.moq?` · MOQ ${p.moq}`:""}</small>}<div className="price"><span>{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}${p.priceMax&&p.priceMax!==p.price?`–${p.priceMax}`:""}`:"Price on request"}</span><b>{p.landed!=null?`≈ ₦${p.landed.toLocaleString()}`:"Quote needed"}</b></div><div className="selectline">{selected?.id===p.id?<><Check size={15}/> Selected</>:<>View landed price <ChevronRight size={14}/></>}</div></div>
    </article>)}</div>
   </section>}
 
