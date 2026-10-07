@@ -3,6 +3,8 @@ import {createRoot} from "react-dom/client";
 import {Search,Camera,Link2,SlidersHorizontal,ChevronRight,Check,ShieldCheck,Truck,PackageCheck,Sparkles,X,Star} from "lucide-react";
 import "./styles.css";
 
+const API="/api";
+
 const FX=225;
 const COSTS={intl:8500,customs:3500,handling:1800,lastMile:3000};
 
@@ -42,11 +44,15 @@ function App(){
  const [selected,setSelected]=useState(null);
  const [photo,setPhoto]=useState(null);
  const [mode,setMode]=useState("top");
+ const [remoteResults,setRemoteResults]=useState([]);
  const [webgpu,setWebgpu]=useState("checking");
+ const [loading,setLoading]=useState(false);
+ const [error,setError]=useState("");
+ const [live,setLive]=useState(false);
  const fileRef=useRef();
  React.useEffect(()=>setWebgpu("gpu"in navigator?"ready":"fallback"),[]);
- const doSearch=()=>{if(query.trim()||photo)setSearched(true)};
- const results=rankProducts(mode).slice(0,5);
+ const doSearch=async()=>{\n  if(!query.trim()&&!photo)return;\n  setSearched(true); setLoading(true); setError(""); setSelected(null);\n  try{\n   const res=await fetch(API+"/search",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({query:query.trim(),mode})});\n   const data=await res.json();\n   if(!res.ok)throw new Error(data.error||"Search failed");\n   setLive(data.sourceStatus?.madeInChina==="live");\n   setRemoteResults(data.results||[]);\n  }catch(e){setLive(false);setError(e.message+" — start the Scout API in Termux.");}\n  finally{setLoading(false);}\n };
+ const results=(remoteResults.length?remoteResults:rankProducts(mode)).slice(0,5);
  return <main>
   <header className="nav"><div className="brand"><span className="mark">S</span>Scout</div><div className="gpu"><span className={webgpu==="ready"?"dot live":"dot"}></span>{webgpu==="ready"?"WebGPU ready":"Compatibility mode"}</div></header>
   <section className="hero">
@@ -67,16 +73,16 @@ function App(){
 
   {!searched?<section className="trust"><div><ShieldCheck/><strong>High-rated suppliers first</strong><span>Scout scores supplier reliability before ranking price.</span></div><div><Truck/><strong>Delivered pricing</strong><span>Compare the estimated total landed cost in Nigeria.</span></div><div><PackageCheck/><strong>QC before shipping</strong><span>Items are checked in China before international shipping.</span></div></section>:
   <section className="results">
-   <div className="resulthead"><div><span className="eyebrow">Scout results</span><h2>5 options found</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · legitimate suppliers only.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
-   <div className="modes">{modes.map(m=><button key={m.id} className={mode===m.id?"mode active":"mode"} onClick={()=>{setMode(m.id);setSelected(null)}}><b>{m.label}</b><span>{m.desc}</span></button>)}</div>
+   <div className="resulthead"><div><span className="eyebrow">{live?"Live supplier results":"Scout results"}</span><h2>{loading?"Searching suppliers…":results.length+" options found"}</h2><p>Ranking: {modes.find(m=>m.id===mode)?.label} · {live?"Made-in-China live data":"demo fallback"}.</p></div><button className="filter"><SlidersHorizontal size={16}/> Refine</button></div>
+   {error&&<div className="errorbox">{error}</div>}<div className="modes">{modes.map(m=><button key={m.id} className={mode===m.id?"mode active":"mode"} onClick={()=>{setMode(m.id);setSelected(null);if(searched)doSearch()}}><b>{m.label}</b><span>{m.desc}</span></button>)}</div>
    <div className="grid">{results.map((p,i)=><article className={"card "+(selected?.id===p.id?"chosen":"")} key={p.id} onClick={()=>setSelected(p)}>
     <div className="photo"><img src={p.image}/><span>{i===0?(mode==="cheapest"?"Lowest cost":"Scout pick"):(p.supplierScore>=94?"Highly rated":"Verified")}</span></div>
-    <div className="cardbody"><h3>{p.name}</h3><small>{p.supplier}</small><div className="rating"><Star size={12} fill="currentColor"/> {p.rating} · {p.supplierScore}/100 supplier score</div><div className="price"><span>¥{p.price}</span><b>≈ ₦{p.landed.toLocaleString()}</b></div><div className="selectline">{selected?.id===p.id?<><Check size={15}/> Selected</>:<>View landed price <ChevronRight size={14}/></>}</div></div>
+    <div className="cardbody"><h3>{p.name}</h3><small>{p.supplier}</small><div className="rating"><Star size={12} fill="currentColor"/> {p.rating??"—"} · {p.supplierScore}/100 supplier score</div><div className="price"><span>{p.price!=null?`${p.currency==="USD"?"$":"¥"}${p.price}`:"Price on request"}</span><b>{p.landed!=null?`≈ ₦${p.landed.toLocaleString()}`:"Quote needed"}</b></div><div className="selectline">{selected?.id===p.id?<><Check size={15}/> Selected</>:<>View landed price <ChevronRight size={14}/></>}</div></div>
    </article>)}</div>
   </section>}
 
-  {selected&&<aside className="estimate"><div><span className="eyebrow">Estimated delivered price</span><h2>₦{selected.landed.toLocaleString()}</h2><p>{selected.rating}★ supplier · {selected.supplierScore}/100 supplier score · Nigeria delivery included.</p></div><div className="breakdown"><span>Product <b>¥{selected.price}</b></span><span>China + international freight <b>Included</b></span><span>Customs & handling <b>Included</b></span><span>Scout sourcing & service <b>Included</b></span></div><button className="continue">Continue with this option <ChevronRight size={17}/></button></aside>}
-  <footer>Scout is an AI-assisted sourcing service. Supplier availability, freight, customs and FX are confirmed before payment. Current product records are demonstration data.</footer>
+  {selected&&<aside className="estimate"><div><span className="eyebrow">Estimated delivered price</span><h2>{selected.landed!=null?`₦${selected.landed.toLocaleString()}`:"Price on request"}</h2><p>{selected.rating??"Unrated"}★ supplier · {selected.supplierScore}/100 supplier score · Source: {selected.source||"Scout"}.</p></div><div className="breakdown"><span>Supplier price <b>{selected.price!=null?`${selected.currency==="USD"?"$":"¥"}${selected.price}`:"Quote required"}</b></span><span>China + international freight <b>Included</b></span><span>Customs & handling <b>Included</b></span><span>Scout sourcing & service <b>Included</b></span></div><button className="continue">Continue with this option <ChevronRight size={17}/></button></aside>}
+  <footer>Scout is an AI-assisted sourcing service. Supplier availability, freight, customs and FX are confirmed before payment. Live supplier records are shown only when the Scout API is connected; otherwise the interface uses clearly labelled demo fallback data.</footer>
  </main>
 }
 createRoot(document.getElementById("root")).render(<App/>);
